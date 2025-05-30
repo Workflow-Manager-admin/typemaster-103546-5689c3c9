@@ -652,14 +652,33 @@ function TestResult({ result, onNav }) {
 function Leaderboard({ leaderboard }) {
   // Filters: today, week, all
   const [filter, setFilter] = useState('today');
-  let filteredLB = leaderboard.filter(
-    entry =>
-      (filter === 'today' && entry.timeframe === 'today') ||
-      (filter === 'week' && (entry.timeframe === 'today' || entry.timeframe === 'week')) ||
-      (filter === 'all')
-  );
-  // Sort by WPM descending, top 10
-  filteredLB = filteredLB.sort((a, b) => b.wpm - a.wpm).slice(0, 10);
+  // Utility: returns true if entry is within the chosen filter's time range
+  function filterByTime(entry, filter) {
+    if (filter === 'today') return entry.timeframe === 'today';
+    if (filter === 'week') return entry.timeframe === 'today' || entry.timeframe === 'week';
+    return true;
+  }
+
+  // Step 1: filter by time
+  let filtered = leaderboard.filter(entry => filterByTime(entry, filter));
+
+  // Step 2: sort for best performance (WPM DESC, accuracy DESC, date DESC)
+  filtered.sort((a, b) => {
+    if (b.wpm !== a.wpm) return b.wpm - a.wpm;
+    if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  // Step 3: get best entry per user (after sort)
+  const seen = new Set();
+  const leaderboardPerUser = [];
+  for (const entry of filtered) {
+    if (!seen.has(entry.username)) {
+      leaderboardPerUser.push(entry);
+      seen.add(entry.username);
+    }
+    if (leaderboardPerUser.length >= 10) break;
+  }
 
   return (
     <div style={{ padding: "120px 0 40px 0" }}>
@@ -698,9 +717,9 @@ function Leaderboard({ leaderboard }) {
             </tr>
           </thead>
           <tbody>
-            {filteredLB.length === 0 ? (
+            {leaderboardPerUser.length === 0 ? (
               <tr><td colSpan={5} style={{ textAlign: "center", color: 'var(--text-secondary)' }}>No scores yet.</td></tr>
-            ) : filteredLB.map((entry, idx) => (
+            ) : leaderboardPerUser.map((entry, idx) => (
               <tr key={idx} style={{ background: idx % 2 === 0 ? '#202226' : "rgba(255,255,255,0.007)" }}>
                 <td style={tdStyle}>{idx + 1}</td>
                 <td style={{ ...tdStyle, fontWeight: 600 }}>{entry.username}</td>
@@ -713,7 +732,7 @@ function Leaderboard({ leaderboard }) {
         </table>
       </div>
       <div style={{ marginTop: 30, color: "var(--text-secondary)", fontSize: 15 }}>
-        The leaderboard shows the top 10 scores for the selected timeframe.
+        The leaderboard shows each user's top score (by WPM, accuracy, recency) for the selected timeframe.
       </div>
     </div>
   );
